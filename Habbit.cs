@@ -1,61 +1,56 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace HabitTracker
 {
-    /// <summary>
-    /// Класс, представляющий привычку
-    /// </summary>
     public class Habit
     {
-        // Свойства (данные привычки)
-        public string Name { get; set; }           // Название привычки
-        public DateTime CreatedDate { get; set; }  // Дата создания
-        public bool IsCompleted { get; set; }      // Выполнена ли привычка
-        public int Streak { get; set; }           // Текущий счётчик последовательных дней
+        public string Name { get; set; }
+        public DateTime CreatedDate { get; set; }
+        public bool IsCompleted { get; set; }
+        public int Streak { get; set; }
 
-        // Конструктор - вызывается при создании новой привычки
+        // Конструктор без параметров - НЕОБХОДИМ для JSON-сериализации
+        public Habit()
+        {
+            // Пустой конструктор
+        }
+
+        // Конструктор с параметрами
         public Habit(string name)
         {
             Name = name;
-            CreatedDate = DateTime.Now;  // Устанавливаем текущую дату и время
-            IsCompleted = false;         // По умолчанию привычка не выполнена
-            Streak = 0;                  // Начинаем с нуля
+            CreatedDate = DateTime.Now;
+            IsCompleted = false;
+            Streak = 0;
         }
 
         // Метод для отметки выполнения привычки
         public void MarkComplete()
         {
-            if (!IsCompleted)  // Проверяем, не выполнена ли уже привычка
+            if (!IsCompleted)
             {
                 IsCompleted = true;
-                Streak++;      // Увеличиваем счётчик
-                Console.WriteLine($" Привычка '{Name}' выполнена! Серия: {Streak} дней.");
+                Streak++;
+                Console.WriteLine($"[V] Привычка '{Name}' выполнена! Серия: {Streak} дней.");
             }
             else
             {
-                Console.WriteLine($" Привычка '{Name}' уже была выполнена сегодня.");
+                Console.WriteLine($"[i] Привычка '{Name}' уже была выполнена сегодня.");
             }
         }
 
-        // Метод для сброса выполнения (например, на следующий день)
+        // Метод для сброса выполнения
         public void ResetCompletion()
         {
             IsCompleted = false;
-            Console.WriteLine($" Привычка '{Name}' готова к новому выполнению.");
+            Console.WriteLine($"[R] Привычка '{Name}' готова к новому выполнению.");
         }
 
         // Переопределяем ToString() для красивого вывода
         public override string ToString()
         {
-            string status = IsCompleted ? "Выполнена" : "Ожидает";
+            string status = IsCompleted ? "[V] Выполнена" : "[ ] Ожидает";
             return $"{Name} | {status} | Создана: {CreatedDate:dd.MM.yy} | Серия: {Streak} дн.";
         }
     }
 }
-
-
-
