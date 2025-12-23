@@ -1,79 +1,70 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Text.Json; // Для работы с JSON
-using System.IO;        // Для работы с файлами
+using System.Linq;
+using HabitTracker.Data;
 
 namespace HabitTracker
 {
     class Program
     {
-        // Статическое поле для хранения списка привычек
-        private static List<Habit> habits = new List<Habit>();
-
-        // Имя файла для сохранения данных
-        private const string DataFileName = "habits.json";
+        private static HabitRepository _repository;
 
         static void Main(string[] args)
         {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-            // Загружаем данные при запуске программы
-            Console.WriteLine("[i] Загрузка данных...");
-            LoadHabitsFromFile();
-            System.Threading.Thread.Sleep(800);
-
-            ShowWelcomeMessage();
-
-            bool exitRequested = false;
-
-            while (!exitRequested)
+            using (_repository = new HabitRepository())
             {
-                ShowMenu();
-                string choice = Console.ReadLine();
+                // Сбрасываем старые выполнения
+                _repository.ResetOldComplections();
 
-                switch (choice)
+                ShowWelcomeMessage();
+
+                bool exitRequested = false;
+
+                while (!exitRequested)
                 {
-                    case "1":
-                        AddNewHabit();
-                        break;
-                    case "2":
-                        ShowAllHabits();
-                        break;
-                    case "3":
-                        MarkHabitComplete();
-                        break;
-                    case "4":
-                        DeleteHabit();
-                        break;
-                    case "5":
-                        SearchHabit();
-                        break;
-                    case "6":
-                        ShowStatistics();
-                        break;
-                    case "7":
-                        SaveHabitsToFile();
+                    ShowMenu();
+                    string choice = Console.ReadLine();
+
+                    switch (choice)
+                    {
+                        case "1":
+                            AddNewHabit();
+                            break;
+                        case "2":
+                            ShowAllHabits();
+                            break;
+                        case "3":
+                            MarkHabitComplete();
+                            break;
+                        case "4":
+                            DeleteHabit();
+                            break;
+                        case "5":
+                            SearchHabit();
+                            break;
+                        case "6":
+                            ShowStatistics();
+                            break;
+                        case "7":
+                            ShowAdvancedStatistics();
+                            break;
+                        case "8":
+                            exitRequested = true;
+                            Console.WriteLine("\nДо свидания! Данные сохранены в базе данных.");
+                            break;
+                        default:
+                            Console.WriteLine("\nНеверный выбор. Попробуйте снова.");
+                            System.Threading.Thread.Sleep(1000);
+                            break;
+                    }
+
+                    if (!exitRequested)
+                    {
                         Console.WriteLine("\nНажмите Enter для продолжения...");
                         Console.ReadLine();
-                        break;
-                    case "8":
-                        Console.WriteLine("\nСохранение данных...");
-                        SaveHabitsToFile();
-                        System.Threading.Thread.Sleep(1000);
-
-                        exitRequested = true;
-                        Console.WriteLine("До свидания! Возвращайтесь завтра!");
-                        break;
-                    default:
-                        Console.WriteLine("\nНеверный выбор. Попробуйте снова.");
-                        System.Threading.Thread.Sleep(1000);
-                        break;
-                }
-
-                if (!exitRequested)
-                {
-                    Console.WriteLine("\nНажмите Enter для продолжения...");
-                    Console.ReadLine();
+                    }
                 }
             }
         }
@@ -81,26 +72,28 @@ namespace HabitTracker
         static void ShowWelcomeMessage()
         {
             Console.Clear();
-            Console.WriteLine("=".PadRight(50, '='));
-            Console.WriteLine("          ТРЕКЕР ПРИВЫЧЕК v1.0");
-            Console.WriteLine("=".PadRight(50, '='));
+            Console.WriteLine("=".PadRight(60, '='));
+            Console.WriteLine("       ТРЕКЕР ПРИВЫЧЕК v2.0 (SQLite + EF Core)");
+            Console.WriteLine("=".PadRight(60, '='));
             Console.WriteLine();
         }
 
         static void ShowMenu()
         {
+            var stats = _repository.GetStatistics();
+
             Console.Clear();
-            Console.WriteLine($"СТАТИСТИКА: Всего привычек: {habits.Count}");
-            Console.WriteLine("=".PadRight(50, '='));
+            Console.WriteLine($"СТАТИСТИКА: Всего: {stats.total} | Выполнено сегодня: {stats.completedToday} | Новых сегодня: {stats.createdToday}");
+            Console.WriteLine("=".PadRight(60, '='));
             Console.WriteLine("1. [+] Добавить новую привычку");
             Console.WriteLine("2. [V] Показать все привычки");
             Console.WriteLine("3. [X] Отметить привычку выполненной");
             Console.WriteLine("4. [-] Удалить привычку");
             Console.WriteLine("5. [S] Найти привычку");
-            Console.WriteLine("6. [%] Показать статистику");
-            Console.WriteLine("7. [SAVE] Сохранить данные");
+            Console.WriteLine("6. [%] Основная статистика");
+            Console.WriteLine("7. [%%] Расширенная статистика");
             Console.WriteLine("8. [>>] Выйти");
-            Console.WriteLine("=".PadRight(50, '='));
+            Console.WriteLine("=".PadRight(60, '='));
             Console.Write("Выберите действие (1-8): ");
         }
 
@@ -119,24 +112,22 @@ namespace HabitTracker
                 return;
             }
 
-            // Проверяем, нет ли уже такой привычки
-            foreach (var habit in habits)
+            if (name.Length > 100)
             {
-                if (habit.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
-                {
-                    Console.WriteLine($"\nПривычка '{name}' уже существует!");
-                    return;
-                }
+                Console.WriteLine("\nНазвание слишком длинное (макс. 100 символов)!");
+                return;
             }
 
-            // Создаем новый объект Habit
-            Habit newHabit = new Habit(name);
-            habits.Add(newHabit);
-
-            // Автосохранение
-            SaveHabitsToFile();
-
-            Console.WriteLine($"\nПривычка '{name}' успешно добавлена!");
+            try
+            {
+                var habit = new Habit(name);
+                _repository.AddHabit(habit);
+                Console.WriteLine($"\nПривычка '{name}' успешно добавлена в базу данных!");
+            }
+            catch
+            {
+                Console.WriteLine("\nНе удалось добавить привычку.");
+            }
         }
 
         static void ShowAllHabits()
@@ -145,11 +136,15 @@ namespace HabitTracker
             Console.WriteLine("ВАШИ ПРИВЫЧКИ");
             Console.WriteLine("=".PadRight(50, '='));
 
-            if (habits.Count == 0)
+            var habits = _repository.GetAllHabits();
+
+            if (!habits.Any())
             {
                 Console.WriteLine("Список привычек пуст. Добавьте первую привычку!");
                 return;
             }
+
+            Console.WriteLine($"Всего привычек: {habits.Count}\n");
 
             for (int i = 0; i < habits.Count; i++)
             {
@@ -159,17 +154,40 @@ namespace HabitTracker
 
         static void MarkHabitComplete()
         {
-            ShowAllHabits();
+            var habits = _repository.GetAllHabits();
 
-            if (habits.Count == 0) return;
+            if (!habits.Any())
+            {
+                Console.WriteLine("Список привычек пуст.");
+                return;
+            }
+
+            Console.Clear();
+            Console.WriteLine("ОТМЕТКА ВЫПОЛНЕНИЯ ПРИВЫЧКИ");
+            Console.WriteLine("=".PadRight(50, '='));
+
+            // Показываем только не выполненные сегодня привычки
+            var notCompletedToday = habits
+                .Where(h => !h.IsCompleted || h.LastCompletedDate?.Date != DateTime.Today)
+                .ToList();
+
+            if (!notCompletedToday.Any())
+            {
+                Console.WriteLine("Все привычки уже выполнены сегодня!");
+                return;
+            }
+
+            for (int i = 0; i < notCompletedToday.Count; i++)
+            {
+                Console.WriteLine($"{i + 1}. {notCompletedToday[i].Name}");
+            }
 
             Console.Write("\nВведите номер привычки для отметки: ");
-            if (int.TryParse(Console.ReadLine(), out int index) && index >= 1 && index <= habits.Count)
+            if (int.TryParse(Console.ReadLine(), out int index) && index >= 1 && index <= notCompletedToday.Count)
             {
-                habits[index - 1].MarkComplete();
-
-                // Автосохранение
-                SaveHabitsToFile();
+                var habit = notCompletedToday[index - 1];
+                habit.MarkComplete();
+                _repository.UpdateHabit(habit);
             }
             else
             {
@@ -179,20 +197,29 @@ namespace HabitTracker
 
         static void DeleteHabit()
         {
-            ShowAllHabits();
+            var habits = _repository.GetAllHabits();
 
-            if (habits.Count == 0) return;
+            if (!habits.Any())
+            {
+                Console.WriteLine("Список привычек пуст.");
+                return;
+            }
+
+            Console.Clear();
+            Console.WriteLine("УДАЛЕНИЕ ПРИВЫЧКИ");
+            Console.WriteLine("=".PadRight(50, '='));
+
+            for (int i = 0; i < habits.Count; i++)
+            {
+                Console.WriteLine($"{i + 1}. {habits[i].Name}");
+            }
 
             Console.Write("\nВведите номер привычки для удаления: ");
             if (int.TryParse(Console.ReadLine(), out int index) && index >= 1 && index <= habits.Count)
             {
-                string habitName = habits[index - 1].Name;
-                habits.RemoveAt(index - 1);
-
-                // Автосохранение
-                SaveHabitsToFile();
-
-                Console.WriteLine($"Привычка '{habitName}' удалена!");
+                var habit = habits[index - 1];
+                _repository.DeleteHabit(habit.Id);
+                Console.WriteLine($"\nПривычка '{habit.Name}' удалена!");
             }
             else
             {
@@ -206,13 +233,6 @@ namespace HabitTracker
             Console.WriteLine("ПОИСК ПРИВЫЧКИ");
             Console.WriteLine("=".PadRight(50, '='));
 
-            if (habits.Count == 0)
-            {
-                Console.WriteLine("Список привычек пуст. Нечего искать.");
-                Console.WriteLine("\nНажмите Enter для возврата в меню...");
-                return;
-            }
-
             Console.Write("Введите название или часть названия для поиска: ");
             string searchTerm = Console.ReadLine()?.Trim();
 
@@ -222,15 +242,12 @@ namespace HabitTracker
                 return;
             }
 
-            // Поиск с помощью LINQ
-            var foundHabits = habits
-                .Where(habit => habit.Name.IndexOf(searchTerm, StringComparison.OrdinalIgnoreCase) >= 0)
-                .ToList();
+            var foundHabits = _repository.SearchHabits(searchTerm);
 
             Console.WriteLine($"\nРезультаты поиска по запросу \"{searchTerm}\":");
             Console.WriteLine("=".PadRight(50, '='));
 
-            if (foundHabits.Count == 0)
+            if (!foundHabits.Any())
             {
                 Console.WriteLine("Привычки не найдены.");
             }
@@ -247,57 +264,96 @@ namespace HabitTracker
         static void ShowStatistics()
         {
             Console.Clear();
-            Console.WriteLine("СТАТИСТИКА ПРИВЫЧЕК");
+            Console.WriteLine("ОСНОВНАЯ СТАТИСТИКА");
             Console.WriteLine("=".PadRight(50, '='));
 
-            if (habits.Count == 0)
+            var habits = _repository.GetAllHabits();
+            var stats = _repository.GetStatistics();
+
+            if (!habits.Any())
             {
                 Console.WriteLine("Список привычек пуст. Нет данных для статистики.");
-                Console.WriteLine("\nНажмите Enter для возврата в меню...");
                 return;
             }
 
-            // 1. Основные счетчики
-            int totalHabits = habits.Count;
-            int completedToday = habits.Count(h => h.IsCompleted);
-            double completionRate = totalHabits > 0 ? (double)completedToday / totalHabits * 100 : 0;
+            // Основные метрики
+            double completionRate = stats.total > 0 ? (double)stats.completedToday / stats.total * 100 : 0;
 
-            // 2. Работа с датами
-            DateTime today = DateTime.Today;
-            int createdToday = habits.Count(h => h.CreatedDate.Date == today);
+            // Дополнительные метрики из БД
+            var longestStreak = habits.Max(h => h.Streak);
+            var bestHabit = habits.FirstOrDefault(h => h.Streak == longestStreak);
+            var averageStreak = habits.Average(h => h.Streak);
 
-            // 3. Поиск рекордов
-            int longestStreak = habits.Max(h => h.Streak);
-            var habitWithLongestStreak = habits.FirstOrDefault(h => h.Streak == longestStreak);
-            var oldestHabit = habits.OrderBy(h => h.CreatedDate).FirstOrDefault();
-            var newestHabit = habits.OrderByDescending(h => h.CreatedDate).FirstOrDefault();
-
-            // 4. Вывод статистики
-            Console.WriteLine($"Всего привычек: {totalHabits}");
-            Console.WriteLine($"Создано сегодня: {createdToday}");
-            Console.WriteLine($"Выполнено сегодня: {completedToday} из {totalHabits} ({completionRate:F1}%)");
+            Console.WriteLine($"Всего привычек: {stats.total}");
+            Console.WriteLine($"Создано сегодня: {stats.createdToday}");
+            Console.WriteLine($"Выполнено сегодня: {stats.completedToday} из {stats.total} ({completionRate:F1}%)");
             Console.WriteLine($"Самая длинная серия: {longestStreak} дн. " +
-                             (habitWithLongestStreak != null ? $"({habitWithLongestStreak.Name})" : ""));
-            Console.WriteLine();
+                             (bestHabit != null ? $"({bestHabit.Name})" : ""));
+            Console.WriteLine($"Средняя серия: {averageStreak:F1} дн.");
 
-            if (oldestHabit != null)
-            {
-                Console.WriteLine($"Старейшая привычка: {oldestHabit.Name} " +
-                                 $"(с {oldestHabit.CreatedDate:dd.MM.yyyy})");
-            }
-
-            if (newestHabit != null)
-            {
-                Console.WriteLine($"Последняя добавленная: {newestHabit.Name} " +
-                                 $"(с {newestHabit.CreatedDate:dd.MM.yyyy})");
-            }
-
-            // 5. Прогресс-бар
+            // Прогресс-бар
             Console.WriteLine("\nПрогресс выполнения сегодня:");
-            DrawProgressBar(completedToday, totalHabits);
+            DrawProgressBar(stats.completedToday, stats.total);
         }
 
-        // Вспомогательный метод для рисования прогресс-бара
+        static void ShowAdvancedStatistics()
+        {
+            Console.Clear();
+            Console.WriteLine("РАСШИРЕННАЯ СТАТИСТИКА");
+            Console.WriteLine("=".PadRight(50, '='));
+
+            var habits = _repository.GetAllHabits();
+
+            if (!habits.Any())
+            {
+                Console.WriteLine("Список привычек пуст.");
+                return;
+            }
+
+            // Анализ по датам
+            var today = DateTime.Today;
+            var weekAgo = today.AddDays(-7);
+
+            var recentHabits = habits
+                .Where(h => h.CreatedDate >= weekAgo)
+                .GroupBy(h => h.CreatedDate.Date)
+                .Select(g => new { Date = g.Key, Count = g.Count() })
+                .OrderBy(x => x.Date)
+                .ToList();
+
+            Console.WriteLine("Новые привычки за последние 7 дней:");
+            foreach (var day in recentHabits)
+            {
+                Console.WriteLine($"  {day.Date:dd.MM}: {day.Count} привычек");
+            }
+
+            // Статистика выполнения
+            var completionStats = habits
+                .GroupBy(h => h.Streak)
+                .Select(g => new { Streak = g.Key, Count = g.Count() })
+                .OrderByDescending(x => x.Count)
+                .ToList();
+
+            Console.WriteLine("\nРаспределение по длине серий:");
+            foreach (var stat in completionStats.Take(5))
+            {
+                Console.WriteLine($"  Серия {stat.Streak} дней: {stat.Count} привычек");
+            }
+
+            // Самые старые привычки
+            var oldestHabits = habits
+                .OrderBy(h => h.CreatedDate)
+                .Take(3)
+                .ToList();
+
+            Console.WriteLine("\nСамые старые привычки:");
+            foreach (var habit in oldestHabits)
+            {
+                var daysOld = (today - habit.CreatedDate.Date).Days;
+                Console.WriteLine($"  {habit.Name} ({daysOld} дней)");
+            }
+        }
+
         static void DrawProgressBar(int completed, int total)
         {
             if (total <= 0) return;
@@ -309,63 +365,6 @@ namespace HabitTracker
             Console.Write(new string('#', filledWidth));
             Console.Write(new string('-', barWidth - filledWidth));
             Console.WriteLine($"] {completed}/{total}");
-        }
-
-        // Метод для сохранения привычек в файл JSON
-        static void SaveHabitsToFile()
-        {
-            try
-            {
-                // Настройки сериализации
-                var options = new JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                };
-
-                // Преобразуем список в JSON-строку
-                string jsonString = JsonSerializer.Serialize(habits, options);
-
-                // Записываем JSON в файл
-                File.WriteAllText(DataFileName, jsonString);
-
-                Console.WriteLine($"\n[i] Данные сохранены в файл: {DataFileName}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"\n[ОШИБКА] Не удалось сохранить данные: {ex.Message}");
-            }
-        }
-
-        // Метод для загрузки привычек из файла JSON
-        static void LoadHabitsFromFile()
-        {
-            try
-            {
-                // Проверяем, существует ли файл
-                if (!File.Exists(DataFileName))
-                {
-                    Console.WriteLine("[i] Файл данных не найден. Будет создан новый.");
-                    return;
-                }
-
-                // Читаем JSON из файла
-                string jsonString = File.ReadAllText(DataFileName);
-
-                // Преобразуем JSON-строку обратно в список привычек
-                var loadedHabits = JsonSerializer.Deserialize<List<Habit>>(jsonString);
-
-                if (loadedHabits != null)
-                {
-                    habits = loadedHabits;
-                    Console.WriteLine($"[i] Загружено {habits.Count} привычек из файла.");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"\n[ОШИБКА] Не удалось загрузить данные: {ex.Message}");
-                Console.WriteLine("[i] Будет создан новый список привычек.");
-            }
         }
     }
 }
